@@ -1,24 +1,27 @@
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
 extern crate env_logger;
-#[macro_use] extern crate log;
-#[macro_use] extern crate failure;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate failure;
 
-extern crate tokio;
-extern crate reqwest;
 extern crate futures;
+extern crate reqwest;
+extern crate tokio;
 
 extern crate colored;
 
 use std::env::args;
 
-use reqwest::async::Client;
-use futures::Future;
 use colored::*;
+use futures::Future;
+use reqwest::async::Client;
 
 #[derive(Debug, Fail)]
 pub enum Error {
@@ -40,11 +43,10 @@ pub struct Crate {
     pub max_version: String,
 }
 
-
-fn get_crate_info(crate_name: &str) -> impl Future<Item=Crate, Error=Error> {
+fn get_crate_info(crate_name: &str) -> impl Future<Item = Crate, Error = Error> {
     #[derive(Deserialize)]
     struct CrateResponse {
-        #[serde(rename="crate")]
+        #[serde(rename = "crate")]
         krate: Crate,
     };
 
@@ -55,13 +57,8 @@ fn get_crate_info(crate_name: &str) -> impl Future<Item=Crate, Error=Error> {
         .and_then(move |res| {
             debug!("url = {}, status = {}", url, res.status());
             res.error_for_status()
-        })
-        .and_then(|mut res| {
-            res.json::<CrateResponse>()
-        })
-        .and_then(|crate_res| {
-            Ok(crate_res.krate)
-        })
+        }).and_then(|mut res| res.json::<CrateResponse>())
+        .and_then(|crate_res| Ok(crate_res.krate))
         .map_err(|e| {
             debug!("error: {}", e);
             Error::CrateNotFound
@@ -69,22 +66,26 @@ fn get_crate_info(crate_name: &str) -> impl Future<Item=Crate, Error=Error> {
 }
 
 fn run_async() {
-
     for arg in args().skip(1) {
-        tokio::spawn(get_crate_info(&arg)
-            .and_then(|krate| {
-                println!("{}: {} {}", krate.name.blue(), krate.max_version, "(latest)".green());
-                Ok(())
-            })
-            .map_err(move |e| {
-                debug!("error: {}", e);
-                println!("{}", format!("the crate '{}' doesn't exist", arg).red());
-            }));
+        tokio::spawn(
+            get_crate_info(&arg)
+                .and_then(|krate| {
+                    println!(
+                        "{}: {} {}",
+                        krate.name.blue(),
+                        krate.max_version,
+                        "(latest)".green()
+                    );
+                    Ok(())
+                }).map_err(move |e| {
+                    debug!("error: {}", e);
+                    println!("{}", format!("the crate '{}' doesn't exist", arg).red());
+                }),
+        );
     }
 }
 
 fn main() {
     env_logger::init();
-    let fut = ::futures::lazy(|| Ok(run_async()));
-    tokio::run(fut);
+    tokio::run(::futures::lazy(|| Ok(run_async())));
 }
