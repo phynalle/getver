@@ -20,3 +20,4 @@ after installation, try this:
 ```
 $ getver libc bitflags rand log lazy_static
 ```
+![screen shot](https://user-images.githubusercontent.com/6007810/46480828-fb98a000-c82c-11e8-89a3-e42f55fc48aa.png)
