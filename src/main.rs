@@ -1,27 +1,12 @@
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
-
-extern crate env_logger;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate failure;
-
-extern crate futures;
-extern crate reqwest;
-extern crate tokio;
-
-extern crate colored;
-#[macro_use]
-extern crate version;
-
 use std::env::args;
 
-use colored::*;
+use colored::Colorize;
+use failure::Fail;
 use futures::Future;
-use reqwest::async::Client;
+use log::debug;
+use reqwest::r#async::Client;
+use serde_derive::Deserialize;
+use version::version;
 
 #[derive(Debug, Fail)]
 pub enum Error {
@@ -57,7 +42,8 @@ fn get_crate_info(crate_name: &str) -> impl Future<Item = Crate, Error = Error> 
         .and_then(move |res| {
             debug!("url = {}, status = {}", url, res.status());
             res.error_for_status()
-        }).and_then(|mut res| res.json::<CrateResponse>())
+        })
+        .and_then(|mut res| res.json::<CrateResponse>())
         .and_then(|crate_res| Ok(crate_res.krate))
         .map_err(|e| {
             debug!("error: {}", e);
@@ -72,7 +58,8 @@ fn run_async() {
                 .and_then(|krate| {
                     println!("{}: {}", krate.name.blue(), krate.max_version.yellow(),);
                     Ok(())
-                }).map_err(move |e| {
+                })
+                .map_err(move |e| {
                     debug!("error: {}", e);
                     println!("{}", format!("the crate '{}' doesn't exist", arg).red());
                 }),

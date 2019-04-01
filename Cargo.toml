@@ -1,6 +1,7 @@
 [package]
 name = "getver"
 version = "0.1.0"
+edition = "2018"
 authors = ["phynalle <phynalism@gmail.com>"]
 license = "MIT"
 readme = "README.md"
