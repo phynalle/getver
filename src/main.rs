@@ -89,7 +89,7 @@ fn print_help_message() {
 }
 
 fn parse_argument() {
-    if let Some(arg) = args().skip(1).next() {
+    if let Some(arg) = args().nth(2) {
         if arg.starts_with('-') {
             if arg == "-h" || arg == "--help" {
                 print_help_message()
