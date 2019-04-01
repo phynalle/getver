@@ -1,17 +1,24 @@
+#![feature(async_await, await_macro, futures_api)]
+#![recursion_limit = "128"]
+
 use std::env::args;
 
 use colored::Colorize;
 use failure::Fail;
-use futures::Future;
+use futures::{compat::Future01CompatExt, future::join_all, FutureExt, TryFutureExt};
 use log::debug;
 use reqwest::r#async::Client;
 use serde_derive::Deserialize;
+use tokio::prelude::Future;
+use tokio_threadpool::ThreadPool;
 use version::version;
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Fail)]
 pub enum Error {
     #[fail(display = "the crate doesn't exist")]
-    CrateNotFound,
+    CrateNotFound(String),
     #[fail(display = "{}", _0)]
     Io(reqwest::Error),
 }
@@ -28,42 +35,37 @@ pub struct Crate {
     pub max_version: String,
 }
 
-fn get_crate_info(crate_name: &str) -> impl Future<Item = Crate, Error = Error> {
+async fn get_crate_info(crate_name: String) -> Result<Crate> {
     #[derive(Deserialize)]
     struct CrateResponse {
         #[serde(rename = "crate")]
         krate: Crate,
     };
 
-    let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
-    Client::new()
-        .get(&url)
-        .send()
-        .and_then(move |res| {
-            debug!("url = {}, status = {}", url, res.status());
-            res.error_for_status()
-        })
-        .and_then(|mut res| res.json::<CrateResponse>())
-        .and_then(|crate_res| Ok(crate_res.krate))
-        .map_err(|e| {
-            debug!("error: {}", e);
-            Error::CrateNotFound
-        })
+    let url = format!("https://crates.io/api/v1/crates/{}", &crate_name);
+    let mut res = await!(Client::new().get(&url).send().compat())?;
+    debug!("url = {}, status = {}", url, res.status());
+    if res.status().as_u16() == 404 {
+        return Err(Error::CrateNotFound(crate_name));
+    }
+    let crate_res: CrateResponse = await!(res.json().compat())?;
+    Ok(crate_res.krate)
 }
 
-fn run_async() {
-    for arg in args().skip(1) {
-        tokio::spawn(
-            get_crate_info(&arg)
-                .and_then(|krate| {
-                    println!("{}: {}", krate.name.blue(), krate.max_version.yellow(),);
-                    Ok(())
-                })
-                .map_err(move |e| {
-                    debug!("error: {}", e);
-                    println!("{}", format!("the crate '{}' doesn't exist", arg).red());
-                }),
-        );
+async fn run_async() {
+    let mut not_founds = Vec::new();
+
+    let crates = join_all(args().skip(1).map(get_crate_info));
+    for krate in await!(crates) {
+        match krate {
+            Ok(krate) => println!("{}: {}", krate.name.blue(), krate.max_version.yellow()),
+            Err(Error::CrateNotFound(name)) => not_founds.push(name),
+            Err(e) => println!("{}", e.to_string().red()),
+        };
+    }
+
+    if !not_founds.is_empty() {
+        println!("{} {}", "Crate Not Found:".red(), not_founds.join(", "));
     }
 }
 
@@ -103,13 +105,15 @@ fn parse_argument() {
                     "usage".green(),
                 );
             }
-            ::std::process::exit(1)
+            std::process::exit(1)
         }
     }
 }
 
 fn main() {
-    env_logger::init();
     parse_argument();
-    tokio::run(::futures::lazy(|| Ok(run_async())));
+    let fut = run_async().unit_error().boxed().compat();
+    let pool = ThreadPool::new();
+    pool.spawn(fut);
+    pool.shutdown_on_idle().wait().unwrap();
 }

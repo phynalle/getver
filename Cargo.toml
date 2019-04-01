@@ -11,13 +11,18 @@ keywords = ["fetch", "crate", "version"]
 
 [dependencies]
 log = "0.4"
-env_logger = "0.5"
 reqwest = "0.9.2"
 failure = "0.1"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-tokio = "0.1"
-futures = "0.1.23"
+romio = "0.3.0-alpha.3"
 colored = "1.6"
 version = "3.0"
+tokio = "0.1.18"
+tokio-threadpool = "0.1.13"
+
+[dependencies.futures]
+package = "futures-preview"
+version = "0.3.0-alpha.13"
+features = ["compat"]
