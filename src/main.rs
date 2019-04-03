@@ -1,24 +1,33 @@
 use std::env::args;
+use std::thread;
 
 use colored::Colorize;
+use curl::{easy::Easy, Error as CurlError};
 use failure::Fail;
-use futures::Future;
 use log::debug;
-use reqwest::r#async::Client;
 use serde_derive::Deserialize;
+use serde_json::Error as SerdeError;
 use version::version;
 
 #[derive(Debug, Fail)]
 pub enum Error {
-    #[fail(display = "the crate doesn't exist")]
-    CrateNotFound,
+    #[fail(display = "the crate {} doesn't exist", _0)]
+    CrateNotFound(String),
     #[fail(display = "{}", _0)]
-    Io(reqwest::Error),
+    Io(CurlError),
+    #[fail(display = "{}", _0)]
+    Serde(SerdeError),
 }
 
-impl From<::reqwest::Error> for Error {
-    fn from(err: ::reqwest::Error) -> Self {
-        Error::Io(err)
+impl From<CurlError> for Error {
+    fn from(e: CurlError) -> Error {
+        Error::Io(e)
+    }
+}
+
+impl From<SerdeError> for Error {
+    fn from(e: SerdeError) -> Error {
+        Error::Serde(e)
     }
 }
 
@@ -28,42 +37,58 @@ pub struct Crate {
     pub max_version: String,
 }
 
-fn get_crate_info(crate_name: &str) -> impl Future<Item = Crate, Error = Error> {
+fn get_crate_info(crate_name: String) -> Result<Crate, Error> {
     #[derive(Deserialize)]
     struct CrateResponse {
         #[serde(rename = "crate")]
-        krate: Crate,
+        krate: Option<Crate>,
     };
 
+    let mut buf = Vec::new();
+    let mut handle = Easy::new();
     let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
-    Client::new()
-        .get(&url)
-        .send()
-        .and_then(move |res| {
-            debug!("url = {}, status = {}", url, res.status());
-            res.error_for_status()
-        })
-        .and_then(|mut res| res.json::<CrateResponse>())
-        .and_then(|crate_res| Ok(crate_res.krate))
-        .map_err(|e| {
-            debug!("error: {}", e);
-            Error::CrateNotFound
-        })
+    handle.url(&url)?;
+    {
+        let mut transfer = handle.transfer();
+        transfer.write_function(|data| {
+            buf.extend_from_slice(data);
+            Ok(data.len())
+        })?;
+        transfer.perform()?;
+    }
+
+    let res: CrateResponse = serde_json::from_slice(&buf)?;
+    res.krate.ok_or_else(|| Error::CrateNotFound(crate_name))
 }
 
-fn run_async() {
+fn run() {
+    let (tx, rx) = spmc::channel::<String>();
+    let num_args = args().len();
+
+    let mut threads = Vec::new();
+    for _ in 0..num_args {
+        let rx = rx.clone();
+        let t = thread::spawn(move || {
+            while let Ok(crate_name) = rx.recv() {
+                match get_crate_info(crate_name) {
+                    Ok(krate) => println!("{}: {}", krate.name.blue(), krate.max_version.yellow()),
+                    Err(e) => {
+                        debug!("error: {}", e);
+                        println!("{}", e.to_string().red());
+                    }
+                }
+            }
+        });
+        threads.push(t);
+    }
+
     for arg in args().skip(1) {
-        tokio::spawn(
-            get_crate_info(&arg)
-                .and_then(|krate| {
-                    println!("{}: {}", krate.name.blue(), krate.max_version.yellow(),);
-                    Ok(())
-                })
-                .map_err(move |e| {
-                    debug!("error: {}", e);
-                    println!("{}", format!("the crate '{}' doesn't exist", arg).red());
-                }),
-        );
+        tx.send(arg).unwrap();
+    }
+    drop(tx);
+
+    for t in threads {
+        t.join().unwrap();
     }
 }
 
@@ -109,7 +134,6 @@ fn parse_argument() {
 }
 
 fn main() {
-    env_logger::init();
     parse_argument();
-    tokio::run(::futures::lazy(|| Ok(run_async())));
+    run();
 }
