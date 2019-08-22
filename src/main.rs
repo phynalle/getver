@@ -1,7 +1,5 @@
-#![feature(async_await)]
-
-use std::env::args;
 use std::collections::HashSet;
+use std::env::args;
 
 use colored::Colorize;
 use failure::Fail;
@@ -55,8 +53,8 @@ async fn get_crate_info(crate_name: String) -> Result<Crate, Error> {
     let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
     let mut res = surf::get(&url).await?;
     if res.status().is_success() {
-        let json: CrateResponse = res.body_json().await?;
-        Ok(json.krate)
+        let CrateResponse { krate } = res.body_json().await?;
+        Ok(krate)
     } else {
         Err(Error::CrateNotFound(crate_name))
     }
