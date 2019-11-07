@@ -3,8 +3,8 @@ use std::env::args;
 
 use colored::Colorize;
 use failure::Fail;
-use futures::future::join_all;
 use serde_derive::Deserialize;
+use runtime::spawn;
 use version::version;
 
 #[derive(Debug, Fail)]
@@ -68,7 +68,13 @@ async fn fetch_version(crate_name: String) {
 }
 
 async fn run(crate_names: HashSet<String>) {
-    join_all(crate_names.into_iter().map(fetch_version)).await;
+    let futures: Vec<_> = crate_names
+        .into_iter()
+        .map(|name| spawn(fetch_version(name)))
+        .collect();
+    for fut in futures {
+        fut.await;
+    }
 }
 
 fn print_help_message() {
