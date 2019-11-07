@@ -2,39 +2,21 @@ use std::collections::HashSet;
 use std::env::args;
 
 use colored::Colorize;
-use failure::Fail;
-use serde_derive::Deserialize;
 use runtime::spawn;
+use serde::Deserialize;
+use thiserror::Error as ThisError;
 use version::version;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, ThisError)]
 pub enum Error {
-    #[fail(display = "the crate '{}' doesn't exist", _0)]
+    #[error("the crate '{0}' doesn't exist")]
     CrateNotFound(String),
-    #[fail(display = "{}", _0)]
-    Io(std::io::Error),
-    #[fail(display = "{}", _0)]
-    Json(serde_json::Error),
-    #[fail(display = "{}", _0)]
-    Surf(surf::Exception),
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
-    }
-}
-
-impl From<surf::Exception> for Error {
-    fn from(err: surf::Exception) -> Self {
-        Error::Surf(err)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::Json(err)
-    }
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Json(#[from] serde_json::Error),
+    #[error("{0}")]
+    Surf(#[from] surf::Exception),
 }
 
 #[derive(Deserialize)]
