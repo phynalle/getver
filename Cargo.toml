@@ -17,5 +17,4 @@ colored = "1.8.0"
 version = "3.0.0"
 runtime = "0.3.0-alpha.8"
 futures = "0.3.0"
-surf = { git = "https://github.com/http-rs/surf", branch = "1.0.3" }
-# surf = { version = "1.0.2", features = ["curl-client"] }
+surf = { version = "1.0.3", features = ["curl-client"] }
