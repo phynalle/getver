@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::env::args;
 
 use colored::Colorize;
-use runtime::spawn;
 use serde::Deserialize;
 use thiserror::Error as ThisError;
 use version::version;
@@ -52,10 +51,10 @@ async fn fetch_version(crate_name: String) {
 async fn run(crate_names: HashSet<String>) {
     let futures: Vec<_> = crate_names
         .into_iter()
-        .map(|name| spawn(fetch_version(name)))
+        .map(|name| tokio::spawn(fetch_version(name)))
         .collect();
     for fut in futures {
-        fut.await;
+        let _ = fut.await;
     }
 }
 
@@ -100,7 +99,7 @@ fn parse_argument() {
     }
 }
 
-#[runtime::main]
+#[tokio::main]
 async fn main() {
     parse_argument();
     run(args().skip(1).collect()).await;
